@@ -1,0 +1,671 @@
+---
+title: "qPCR vignette Part 1"
+subtitle: Statistics and the standard curve.
+author: A.O. Shelton and friends.
+date: today
+format:
+  pdf:
+    fig-format: png
+    mathspec: true
+knitr:
+  opts_chunk:
+    fig.path: vignette_figures/
+editor: visual
+bibliography: multimarker_refs_2026.bib
+csl: MEE.csl
+header-includes:
+  - \usepackage{lineno} 
+  - \usepackage{setspace} 
+  - \linenumbers
+  - \usepackage{amsmath,amssymb}
+---
+
+## Introduction
+
+This is the first in a series of vignettes intended to introduce the analysis of water samples collected for environmental DNA (eDNA) using quantitative PCR (qPCR). This document is intended to walk through the required steps for taking laboratory results from qPCR through to statistical results. To make this document as useful and applied as possible, we introduce an example dataset derived from the Integrated West Coast Pelagics Survey to walk through each step of qPCR data analysis. We provide code for both data processing and statistical throughout.
+
+This document is not an exhaustive discussion of all aspects of qPCR analyses. In particular, we will not discuss the work required to develop and test a qPCR primer for use. The development of qPCR primers is described extensively in the published literature and we refer interested parties to this literature [see e.g.,, @Andruszkiewicz2020; @Allison2023; @Klymus2020; @Lopez2025].
+
+The following document is broken into three sections. First, we provide background and discuss the motivation and aims of qPCR analyses. Second, we walk through the main data components needed for qPCR analysis. We start with the creation and estimation of the standard curve for water samples associated with Pacific hake. Third, we add a small number of field samples to they analysis and show how to analyze field samples alongside standard curve observations. This provides estimates of DNA concentration for unknown samples.
+
+Extensions and elaboration on qPCR analyses will be discussed in subsequent vignettes in this series. In particular, later vignettes discuss more complex qPCR analyses as well as connections between qPCR and other types of information derived from genetic analyses of water samples.
+
+## 1. Preamble and background: motivation and aims of qPCR
+
+Quantitative PCR has been used for decades to measure the concentration of a particular DNA template sequence within a sample. We are interested in eDNA and so we motivate this document based on eDNA samples. We assume that a set of environmental samples were collected (e.g., several 1L bottles of seawater) for eDNA analysis. The water samples were subsequently filtered, to extract cells and free DNA from the water. Following filtration, the sample filters were placed in a chemical buffer to halt the degradation of any DNA present. As a final step, the samples were processed in the laboratory to extract and clean any DNA collected on the filter. In our protocols, this sample contains 100 $\mu$L ready for use in qPCR (or other genetic analysis). We assume in the following that this cleaned sample has then been analyzed via qPCR to provide an estimate of concentration of a particular segment of DNA present. This document is devoted to analyzing and understanding the qPCR observations.
+
+At this point, it is worth backtracking briefly to discuss why enumerating the number of copies of DNA from a water sample is valuable. Ultimately, the DNA present in each cleaned sample originated from organisms in the environment (assume, for now, that there is no laboratory contamination). Then, if we can measure the DNA within samples, we can potentially make reasonable inferences about the organisms of interest from near the water sample collection point. This is not a simple task. It involves mapping qPCR observations to the DNA concentration in each extracted sample, then back to the concentration of DNA in the water bottle(s) collected, and eventually to link DNA in the water sample to attributes of the organisms in the environment (e.g., abundance and distribution) and the environment itself (e.g., water currents, temperature, etc.). We will delve into the details of these analyses toward the end of this vignette and in additional documents in this series.
+
+An important first step in qPCR analysis is to understand which component of DNA is being measured. In many environmental DNA applications focused on large eukaryotic organisms like fish, crustaceans, cephalopods, or mammals (we are marine focused at NOAA), the targeted DNA template is a sequence in the mitochondrial DNA (mtDNA). mtDNA is circular, haploid DNA, relatively small -- it encodes only a handful of genes --- and is largely conserved across eukaryotes. However, there are tens to thousands of mitochondria in a single cell, meaning that mtDNA have orders of magnitude more copies than nuclear DNA. This means that mtDNA is generally more abundant in the environment and therefore significantly easier to sample and detect relative to nuclear DNA in most settings (CITE).
+
+In the following, we will be discussing a qPCR primer that amplifies a region of the 12S gene in the hake mtDNA genome [see @ramon2021]. This primer amplifies a 101 bp long fragment. We will not delve deeply into the chemistry and technology of the qPCR process nor on the specific protocols we use, but they are available [see @ramon2021; @Shaffer2025MER] . As with any genetic project, careful and detailed lab work are the only way to be successful with eDNA; the details matter. However, we focus on what we view as the general aspects of analyses with respect to qPCR data outputs. We assume that you have competent laboratory experts producing and checking your qPCR observations or that you have contracted your laboratory work to reputable commercial laboratories.
+
+## Overview of PCR and qPCR data
+
+Recall from biology classes that Polymerase Chain Reaction (PCR) is a process for replicating DNA. From a starting number of copies in the sample, a perfectly efficient PCR reaction will lead to a doubling the number of copies of the target DNA sequence each cycle. So if there is 1 copy initially, 2 copies are present after 1 PCR cycle, 4 are present after 2 cycles, 8 copies after 3 cycles, and so on. In practice, PCR is never perfectly efficient, but it can be nearly so. We discuss and illustrate this below.
+
+qPCR makes use of the exponential property of PCR to quantify the initial number of DNA copies in a sample. When using qPCR, we do not directly observe DNA concentration in a given sample. Instead, we observe the PCR cycle at which each sample can be detected (or if it was never detected). More precisely, we measure the brightness of a fluorescent tag attached to our target DNA sequence. We then estimate the PCR cycle at which the fluorescence in a particular reaction was detected to exceed background-levels. If we know (or can calculate) the number of DNA copies needed to fluoresce at that threshold brightness and have measured the number of PCR cycles needed to reach that threshold, we can provide an estimate of the initial number of DNA copies in each sample. To translate the measured PCR cycle for an sample into the starting copies of DNA, we measure a set of samples with a range of known starting copy numbers in each qPCR. These samples with known copy number, often referred to as "standards", allow us to determine the relationship between the PCR cycles to detection and the starting copy number. This statistical relationship between copy number and observed PCR cycle at detection is known as the standard curve.
+
+## 2. The standard curve
+
+Every qPCR analysis needs to include a standard curve which contains a known number of copies of the DNA sequence target by the qPCR primer (or, in practice, the expected number of copies in an aliquot). Again, the standard curve allows us to translate the observed PCR at detection into an estimated DNA concentration. For hake, we created a synthetic, linear, double-stranded oligonucleotide gBlocks Gene Fragments, herein ‘gBlocks’ (Integrated DNA Technologies, Coralville, IA, US), of 130 bp to provide standards for the target species [@ramon2021]. This segment comes from the same 12S region of the hake genome. To generate a standard curve, we amplify replicate standards for DNA copies across six orders of magnitude, from 1 copy per $\mu$L by factors of 10 to 100,000 copies per $\mu$L. We include three replicates for all input concentrations of 10 copies per $\mu$L and larger. Because there tends to be larger variability among replicate qPCR at low concentrations, we include six replicates of the 1 copy per $\mu$L standard and an additional 3 replicates at 5 copies per $\mu$L.
+
+Note that the use of gBlocks is one of several possible methods for developing a standard curve (see e.g., CITES), but all approaches follow the same basic logic of amplifying samples with known concentration and using the estimated standard curve to provide estimates for samples with unknown concentration.
+
+In practice, we conduct qPCR on three different species, using three distinct qPCR probes, simultaneously. This is known as a "multiplex reaction" (CITE). In our case we are assessing the abundance of mtDNA for three different species, hake, Pacific sardine (*Sardinops sagax*), and northern anchovy (*Engraulis mordax*). Each has a distinct, species-specific primer that amplifies a region of the respective mitochondrial genomes. We will focus on the results for hake only in this vignette, but the approach could be applied similarly applied to the other species.
+
+We can now look at some qPCR data for a set of standards:
+
+```{r, message = FALSE, warning=FALSE}
+# Load some libraries
+library(here)
+library(tidyverse)
+library(rstan)
+library(gridExtra)
+# Run on multiple cores, if possible.
+options(mc.cores = parallel::detectCores())
+
+# Read in the standards data for the 2025 surveys
+dat.stand <- readRDS(here('Data','_Compiled_qpcr_data','dat_stand_2025.rds'))
+
+# For the purposes of this examination, we can focus in on results 
+# from a single plate of qPCR and only the results for hake
+# Replace "Undetermined" with a numeric missing data value (-99)
+dat.stand <- dat.stand |> 
+                mutate(Ct = ifelse(Ct == "Undetermined",-99,Ct),
+                       Ct = as.numeric(Ct))
+
+# Look briefly at the standards data
+head(dat.stand)
+```
+
+\
+Here each row represents the results from a single sample in a single well on a qPCR reaction plate. These wells are labeled as standards (*task* = "STANDARD"). The remaining samples of unknown concentration are contained in a separate data file. The main data of interest are contained in the columns *Ct* and *copies_ul* which provide the PCR cycle at which hake were detected and the input copies per $\mu$L. For all of the samples (both standards and unknowns) we use 2 $\mu$L per reaction. The column *IPC_Ct* reports the PCR cycle at which an internal control was measured to amplify. We discuss internal controls further in the context of PCR inhibition below.
+
+```{r, message=FALSE, warning=FALSE}
+# re-code samples that did not amplify (Ct = "Undetermined")
+# dat.stand <- dat.stand %>% 
+#                 # These observations have been previously determined to be 
+#                 # non-amplifications
+#                 mutate(Ct = ifelse(Ct > 37.5,"Undetermined",Ct))
+
+# Choose a single example plate 
+INHIBIT.RATE = 0.75 # exclude Ct with NTC larger than this value
+PLATE = "H25_53750_11_redo"
+LAB <- c(1,5,10,"100","1,000","10,000","100,000")
+p_stand1 <- ggplot(dat.stand %>%  
+                     filter(qPCR == PLATE, inhibition_rate < INHIBIT.RATE)) +
+            geom_point(aes(x=copies_ul,y=Ct),alpha=0.5) +
+            geom_point(data= dat.stand %>%  
+                             filter(qPCR == PLATE, Ct == -99),
+                             aes(x=copies_ul,y=40),color="red",alpha=0.5) +
+            scale_x_continuous(trans="log",
+                               breaks = c(1,5,10^seq(1:5)),
+                               labels = LAB) +
+            coord_cartesian(ylim=c(15,NA)) +
+            geom_point(data= dat.stand %>%  
+                         filter(qPCR == PLATE, 
+                                inhibition_rate > INHIBIT.RATE ),
+                         aes(x=copies_ul,y=Ct),color="blue",alpha=0.5) +
+            theme_bw()
+#print(p_stand1)            
+
+p_stand_all <- ggplot(dat.stand) +
+            geom_jitter(aes(x=copies_ul,y=Ct,color=qPCR),
+                        height=0, width=0.2,alpha=0.5) +
+            geom_jitter(data= dat.stand %>%  
+                             filter(Ct == -99),
+                             aes(x=copies_ul,y=40),color="red",
+                             alpha=0.5,height=0,width=0.15) +
+            scale_x_continuous(trans="log",
+                               breaks = c(1,5,10^seq(1:5)),
+                               labels = LAB) +
+            coord_cartesian(ylim=c(15,NA)) +
+            theme_bw() +
+            theme(legend.position = "none")
+#print(p_stand_all)            
+
+```
+
+```{r warning=FALSE,message=FALSE}
+#| fig-width: 5
+#| fig-height: 6
+#| out-width: "80%"
+#| fig-cap: "Plots of observed $Ct$ for hake standards.  The top panel shows all 21 plates simultaneously, with one color for each plate.  The bottom panel shows results from a single plate. The red dots show samples that did not amplify (arbitrarily plotted at $Ct = 40$).  In the bottom panel blue dots show replicates that were deemed to be inhibited. Points in the top panel have been jittered slightly to reduce overlap. "
+grid.arrange(p_stand_all,p_stand1,ncol=1)
+```
+
+These are fairly typical plots for qPCR standards. The top plot shows the standards for 21 plates simultaneously while the lower panel shows the results for a single plate. The red dots show replicates that did not amplify (labeled as $Ct$ = "Undetermined", in the data file; they are plotted above at an arbitrarily large cycle, $Ct$ = 40). Low DNA concentrations are associated with a large $Ct$ and $Ct$ decreases linearly (on a log-scale) as concentrations increase. Inhibition of PCR was detected in the high DNA concentration samples (blue points). The slope of a line through these points informs the efficiency of the qPCR assay.
+
+Several other general attributes of qPCR data are also apparent. First, the variability in observed $Ct$ among replicates is higher at low copies (compare 1, 5, or 10 copies per $\mu$L with samples with \>100 copies per $\mu$L). Second, nondetections of PCR amplification occur in low concentration replicates (here, in one replicate at 1 copy per $\mu$L). Third, high concentrations can be associated with PCR inhibition (all replicates at 100,000 copies per $\mu$L were inhibited in this plate), potentially affecting our estimates of amplification rates (see next section). A fourth feature of qPCR data that is not obvious from the plot is that the slope of any line through the points must be constrained; the slope cannot exceed a more than doubling of copies per PCR cycle based on the physics of DNA replication during PCR.
+
+The ultimate goal is to be able to use the standard curve to translate the observed $Ct$ from samples into estimates of DNA concentration. Most PCR machines and accompanying software provide an estimate of the slope for the standard curve for each plate analyzed (see next section). Below we present models for estimating the parameters from the standard curve that account for these common attributes of qPCR data.
+
+#### Tangent 1: On qPCR machines and built-in software
+
+Software associated with qPCR machines themselves will automatically estimate the slope of a standard curve and thereby provide a way of translating observed $Ct$ values into estimates of DNA concentration. A reasonable question is then: why shouldn't I just use the estimates that come from the machine? The short answer is that the qPCR machine is estimating a relatively simple statistical model to that does not account for the four common attributes of qPCR data listed in the previous paragraph. Not accounting for these data features can lead to biased and/or increased uncertainty in the estimates of DNA concentration. For example, it is common for qPCR machines to estimate a slope that indicates efficiency exceeding a doubling of copies per cycle. Additionally, they often will not exclude include inhibited, high concentration standards in the estimation of the standard curve. The magnitude of bias and increased uncertainty that follow from such mistakes will vary among projects and species, but they are common. In a separate vignette, we present a summary the consequences of different modeling choices for qPCR analysis (see qPCR Vingette Part III).
+
+#### Tangent 2: Inhibition
+
+Inhibition of the PCR reaction can occur for a range of reasons [see @Opel2010]. For field samples inhibition often occurs with the presence of chemical compounds that affect the Taq polymerase and DNA replication. For marine eDNA samples, compounds associated with in phytoplankton often cause PCR inhibition (CITE). Additionally, very high DNA concentrations can be associated with a decline in PCR efficiency [@Opel2010]. We see this type of inhibition frequently in our qPCR standards. One consequence that it is important to test for inhibition in all qPCR assays. We detect inhibition by adding a standardized concentration of a distinct species to each sample. We use a qPCR primer for DNA template from an extinct New Zealand land bird, the broad-billed moa (*Euryapteryx curtus)*, that will not be confused with marine fish [@ramon2021]. We can then compare the cycle at which the moa is detected in each sample with the average cycle of detection for six samples of moa amplified alone. These moa-only samples are referred to non-template controls (ntc). This measure of inhibition is reflected in the *inhibition_rate* column. We use differences greater than `r INHIBIT.RATE` to suggest inhibition and that those samples should be either re-analyzed or omitted from analysis to avoid providing a biased estimate of DNA concentration. Below we omit observations for which inhibition was detected.
+
+### Models for a single standard curve
+
+To make a model for the standard curve, we first need to recognize that we have two kinds of observations. For each sample, amplification can either be detected or not. Then, if amplification was detected, we observed continuous, positive value for the estimated PCR cycle at which it amplified. Let $G_{ir}$ be $1$ if amplification was detected for sample $i$ and replicate $r$ and $0$ otherwise. Conditional on $G_{ir} = 1$, let $C_{ir}$ be the PCR cycle at which amplification was detected. Finally, let $K_{i}$ be the known concentration of each standard in copies per $\mu$L.
+
+We can connect the observations from qPCR and concentrations using two likelihoods, one for detection and one for positive observations. For the detection component, we can define the probability of observing amplification as directly related to probability of having one or more copies of DNA in the aliquot. For rare DNA molecules floating in solution, we can assume the number of copies included in an aliquot follows a Poisson distribution. Then the number of copies getting one or more copies in an aliquot is one minus the probability of getting exactly zero copies in an aliquot. For a Poisson distribution, this probability is a function of the input concentration and equal to $1 - e^{2K_i}$. We include a 2 because we use a $2\mu$L aliquot in each sample and therefore expected copies in each well is $2K_i$. Finally, we add parameter $\phi$ which is constrained to be a continuous value between $0$ and $1$ allows for the imperfect amplification of DNA copies. A value of $\phi = 1$ would indicate perfect PCR efficiency, $\phi = 0$ indicates no amplification. We expect $\phi$ to be close to 1. The product, $K_i \phi$, can be interpreted as the effective concentration of the standard. Then the likelihood for detection is
+
+\begin{align}
+  G_{ir} &\sim \text{Bernoulli}\left(1-e^{-2 K_i \phi} \right).
+\end{align}
+
+Next, we have the likelihood for the positive observations. We use a log-linear model with an intercept, $\beta_{0}$, and slope, $\beta_{1}$ to predict the mean cycle of amplification. We also allow the variability to change as a function of the input copy,
+
+\begin{align}
+  \mu_{i} &= \beta_{0}+\beta_{1}\log{(2K_{i})} \notag \\
+  \log \sigma_{Ci} &= \gamma_0 + \gamma_1 \log{(2K_{i})} \notag \\
+  C_{ir} &\sim \text{Normal}(\mu_{i},\sigma_{Ci}) \quad  \text{if}  \: G_{ir} =1
+\end{align}
+
+Notice that we use natural logarithms rather than base 10 logarithms, here. This is somewhat non-standard, but will be helpful to ease connecting the model for the standards to later models for field samples. For this model applied to one plate of standards, we need to estimate five parameters, $\beta_{0},\beta_{1},\gamma_{0},\gamma_1, \text{and},\phi$. We implement the model below using the Bayesian estimation program Stan [@stan2025] and specify diffuse prior distribution for all parameters. We estimate $\text{logit}({\phi})$ instead of $\phi$ directly for computational efficiency. We place a hard constraint on the slope parameter $\beta_{1}$ as well. Due to the biochemistry of the PCR process, the number of molecules can at most double each PCR cycle. Therefore we constrain $\beta_{1}$ to have a maximum value of $-\dfrac{1}{\log(2)}= -1.442695$, which corresponds to a maximum change of one cycle (numerator) when the concentration doubles on the log-scale (denominator). Steeper (more negative) slopes indicate decreased PCR efficiency.
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+# Modify data by adding a column indicating amplification success
+# Only keep samples that were below the inhibition threshold.
+dat.stand1 <- dat.stand %>% 
+                  filter(qPCR==PLATE,inhibition_rate<INHIBIT.RATE) %>%  
+                  mutate(bin.obs = ifelse(Ct == -99,0,1))
+
+dat.stand.bin <- dat.stand1
+dat.stand.pos <- dat.stand1 %>% filter(bin.obs==1)
+N_stand_bin <- nrow(dat.stand.bin)
+N_stand_pos <- nrow(dat.stand.pos)
+
+# Make some objects that aid making pretty predictions
+# from the fitted model.
+N_pred = 50
+log_K_pred = seq(0,log(100000),length.out =N_pred)
+K_pred = exp(log_K_pred)
+
+stan_data_standards <- list(N_stand_bin = N_stand_bin,
+                  N_stand_pos = N_stand_pos,
+                  bin_obs = dat.stand1$bin.obs,
+                  K_bin = dat.stand.bin$copies_ul,
+                  ct_obs  = dat.stand.pos$Ct,
+                  log_K_pos = dat.stand.pos$copies_ul %>% log(),
+                  beta0_prior = c(40,5), 
+                  beta1_prior = c(-1 / log(2),0.20),
+                  # hard constraint on maximum PCR efficiency. 
+                  beta1_max = -1 / log(2),
+                  # Diffuse prior distributions.
+                  gamma0_prior = c(0,2), #
+                  gamma1_prior = c(-0.2,0.5),
+                  logit_phi_prior = c(1,3),
+                  #Predictions
+                  N_pred = N_pred,
+                  K_pred = K_pred,
+                  log_K_pred = log_K_pred)
+
+# Specify some reasonable characteristics for MCMC chains.
+N_CHAIN = 3
+WARM = 1000
+ITER = 2000
+
+ stanMod = stan(file = here("Scripts","vignette_stan","qPCR_standards.stan"),
+                 data = stan_data_standards, 
+                 verbose = FALSE, chains = N_CHAIN, thin = 1, 
+                 warmup = WARM, iter = WARM + ITER, 
+                 refresh = 0, #omit printing of chain progress.
+                 boost_lib = NULL)
+
+# Look at trace plots
+# traceplot(stanMod,pars=c("beta_0","beta_1","gamma_0","gamma_1","logit_phi"))
+
+ # Summarize fits. 
+stanMod_summary <- summary(stanMod)$summary
+stanMod_main <- summary(stanMod,pars=c("beta_0","beta_1","gamma_0",
+                                       "gamma_1","logit_phi"))$summary
+beta_1_est <- stanMod_main["beta_1","mean"] %>% round(.,3)  
+
+
+# Summarize predictions.
+stanMod_pred_C <- summary(stanMod,pars=c("pred_C"))$summary %>% 
+                            as.data.frame() %>% 
+                            cbind(.,K_pred) %>% 
+                            rename(q.975 = '97.5%',q.025 = '2.5%')
+stanMod_pred_theta <- summary(stanMod,pars=c("pred_theta"))$summary %>% 
+                            as.data.frame() %>% cbind(.,K_pred) %>% 
+                            rename(q.975 = '97.5%',q.025 = '2.5%')
+
+# Ok. Overlay estimated standard curve on observations
+p_stand_single <- p_stand1 +
+                    geom_line(data=stanMod_pred_C,
+                              aes(x=K_pred,y=mean),color="red") +
+                    geom_line(data=stanMod_pred_C,
+                              aes(x=K_pred,y=q.975),color="red",
+                                  linetype="dashed") +
+                    geom_line(data=stanMod_pred_C,
+                              aes(x=K_pred,y=q.025),color="red",
+                                  linetype="dashed") 
+
+p_stand_single_bin <- ggplot(dat.stand1 %>% filter(qPCR ==PLATE))+
+                      geom_jitter(aes(x=copies_ul,y=bin.obs),
+                            alpha=0.5,height=0.05,width=0)+
+                      geom_line(data=stanMod_pred_theta,
+                            aes(x=K_pred,y=mean),color="red") +                    
+                      scale_x_continuous(trans="log",
+                            breaks = c(1,5,10^seq(1:5)),
+                            labels = LAB) +
+                      scale_y_continuous("Detection Probability",
+                            breaks = c(0,0.25,0.5,0.75,1.0))+
+                      geom_line(data=stanMod_pred_theta,
+                            aes(x=K_pred,y=q.975),color="red",
+                            linetype="dashed") +
+                      geom_line(data=stanMod_pred_theta,
+                            aes(x=K_pred,y=q.025),color="red",
+                            linetype="dashed") +
+                      theme_bw() 
+```
+
+```{r message=FALSE,warning=FALSE}
+#| fig-width: 5
+#| fig-height: 6
+#| out-width: "90%"
+#| fig-cap: "The standard curve model estimated for a single set of standards on a single plate for hake. In both panels points show individual qPCR replicates and red line show the posterior mean and 95% prediction interval for observations. The top panel shows the measured amplification cycle ($Ct$) as a function of input copy concentration. The red dot indicates a single qPCR replicate in which amplification was not detected. Blue dots show inhibited samples that were not used in model estimation. The bottom panel show the observatoins and estimated detection probability."
+grid.arrange(p_stand_single,p_stand_single_bin,ncol=1)
+```
+
+Broadly, these models look like they fit reasonably and have the characteristics we mentioned in our initial description the standards. The slope is negative and is close to perfect doubling efficiency (posterior mean $\beta_1 =$`r beta_1_est`), variability becomes smaller as the concentration of DNA increases, and the probability of detection increases rapidly as concentrations increase.
+
+Most qPCR analyses suggest that you should look at the $R^2$ of your best fit line as a measure of the quality of your standards (see CITE). While that is a fine thing to do, it is something of a red herring, as $R^2$ measures how different your estimated line is from a line with slope equal to 0 (in our parameterization, this is equivalent to assuming $\beta_1 = 0$). One odd attribute of using $R^2$ to evaluate qPCR standards is that, all else being equal, steeper slopes (i.e., less efficient PCRs), will tend to have higher $R^2$, simply because less efficient qPCRs have slopes that are more different than zero. At base, $R^2$ calculations also assume equal variation across different concentrations and do not acknowledge non-detections. We violate these assumptions for $R^2$ in the above model. A simpler, visual examination of the standards will usually be sufficient to assess a standard curve. Ask: does the line go through the points, and, are the observations within the uncertainty bounds? An intrepid investigator could also reasonably examine the patterns of the residuals, or calculate the statistical leverage of individual $Ct$ observations, but that will often be unnecessary. It is typically readily apparent when something is amiss with a standard curve.
+
+### Models for a multiple standard curves
+
+We can expand upon this work to model qPCR observations across many plates. Here, we can extend the statistical model above to share information across multiple PCR plates. We introduce the index $j$ for PCR plates and allow the slope and intercept parameters to vary among plates (i.e., $\beta_{0j}, \beta_{1j}$). We could also make the variability parameters similarly plate-specific, but we opt to share $\gamma_0$, $\gamma_1$, and $\phi$ across plates. We do add one more parameter, $\sigma_0$ to ensure a minimum variability among qPCR replicates. This parameter is easy to estimate when there are multiple PCR plates. This leads to a modestly different form for the variability among Ct observations and the full model for all plates becomes,
+
+\begin{align}
+  G_{ijr} &\sim \text{Bernoulli}\left(1-e^{-2 K_i \phi}\right) \notag \\
+  \mu_{ij} &= \beta_{0j}+\beta_{1j}\log{(2K_{i})} \notag \\
+  \sigma_{Ci}^2 &= \sigma_0^2 + e^{2(\gamma_0 + \gamma_1 \log(2K_i))} \notag \\
+  C_{ijr} &\sim \text{Normal}(\mu_{ij},\sigma_{Ci}) \quad  \text{if}  \: G_{ir} =1
+\end{align}
+
+The rules of random variables stipulate that variances are additive, but standard deviations are not, hence the inclusion of squares in the third line of the equation. We can fit this model in Stan and provide estimates for the standard curve on each plate.
+
+```{r, message=FALSE, warning=FALSE,results='hide'}
+
+# Make index for plates 
+PLATES <- dat.stand %>% distinct(qPCR) %>% mutate(plate_idx = 1:nrow(.))
+N_plate = max(PLATES$plate_idx)
+# Filter out inhibited samples, make discrete observations for amplification,
+# join with plate index.
+dat.stand1 <- dat.stand %>% filter(inhibition_rate < INHIBIT.RATE) %>%  
+                          mutate(bin.obs = ifelse(Ct ==-99,0,1)) %>% 
+                          left_join(.,PLATES)
+
+dat.stand.pos <- dat.stand1 %>% filter(bin.obs==1)
+N_stand <- nrow(dat.stand1)
+N_stand_pos <- nrow(dat.stand.pos)
+plate_stand_idx <- dat.stand1$plate_idx
+pos_stand_idx <- which(dat.stand1$bin.obs == 1)
+  
+# For making pretty predictions
+N_pred = 50
+log_K_pred = seq(0,log(100000),length.out =N_pred)
+K_pred = exp(log_K_pred)
+
+stan_data_standards <- list(N_stand = N_stand,
+                  N_stand_pos = N_stand_pos,
+                  bin_obs_stand = dat.stand1$bin.obs,
+                  N_plate = N_plate,
+                  plate_stand_idx = plate_stand_idx,
+                  pos_stand_idx = pos_stand_idx,
+                  K = dat.stand1$copies_ul,
+                  ct_obs_stand  = dat.stand.pos$Ct,
+                  log_K = dat.stand1$copies_ul %>% log(),
+                  beta0_prior = c(40,5), 
+                  beta1_prior = c(-1/log(2),0.20),
+                  # hard constraint on maximum PCR efficiency. cannot be less negative
+                  beta1_max = - 1/log(2),
+                  gamma0_prior = c(0,2), #
+                  gamma1_prior = c(-0.2,0.5),
+                  logit_phi_prior = c(1,3),
+                  #Predicitons
+                  N_pred = N_pred,
+                  K_pred = K_pred,
+                  log_K_pred = log_K_pred)
+
+N_CHAIN = 3
+WARM = 1000
+ITER = 2000
+
+init_stan <- function(N_plate,N_CHAIN){
+              init_list <- list()
+              for(i in 1:N_CHAIN){
+                init_list[[i]] <- list(beta_0 = runif(N_plate,30,40));
+              }
+              return(init_list)
+}
+
+# This should take about 10 seconds.
+stanMod = stan(file = here("Scripts","vignette_stan",
+                          "qPCR_standards_multi-plate.stan") ,
+               data = stan_data_standards, 
+               verbose = FALSE, chains = N_CHAIN, thin = 1, 
+               warmup = WARM, iter = WARM + ITER, 
+               init = init_stan(N_plate,N_CHAIN),
+               refresh = 0,
+               boost_lib = NULL
+          )
+
+# As with any Bayesian model, you should always look at traceplots, examine
+# convergence criteria like R^2, and visually examine the quality of fits.
+# traceplot(stanMod,pars=c("beta_0","beta_1","gamma_0","gamma_1","logit_phi","sigma_0"))
+
+stanMod_summary <- summary(stanMod)$summary
+stanMod_main <- list()
+stanMod_main[["beta_0"]]    <- summary(stanMod,pars=c("beta_0"))$summary %>% 
+                                as.data.frame() %>% 
+                                cbind(.,plate_idx=PLATES$plate_idx) %>% 
+                                rename(q.975 = '97.5%',q.025 = '2.5%')
+stanMod_main[["beta_1"]]    <- summary(stanMod,pars=c("beta_1"))$summary %>% 
+                                as.data.frame() %>% 
+                                cbind(.,plate_idx=PLATES$plate_idx) %>% 
+                                rename(q.975 = '97.5%',q.025 = '2.5%')
+
+
+stanMod_main[["gamma_0"]]   <- summary(stanMod,pars=c("gamma_0"))$summary
+stanMod_main[["gamma_1"]]   <- summary(stanMod,pars=c("gamma_1"))$summary
+stanMod_main[["logit_phi"]] <- summary(stanMod,pars=c("logit_phi"))$summary
+
+stanMod_main[["phi"]]       <- summary(stanMod,pars=c("phi"))$summary
+stanMod_main[["pred_norm_rand"]] <- summary(stanMod,pars=c("pred_SD"))$summary %>% 
+                                    as.data.frame() %>% 
+                                    cbind(.,K_pred) %>% 
+                                    rename(q.975 = '97.5%',q.025 = '2.5%')
+stanMod_main[["pred_theta"]]   <- summary(stanMod,pars=c("pred_theta"))$summary %>% 
+                                  as.data.frame() %>% 
+                                  cbind(.,K_pred) %>% 
+                                  rename(q.975 = '97.5%',q.025 = '2.5%')
+
+pred_all <- NULL
+for(i in 1:N_plate){
+    pred <- data.frame(Mean = stanMod_main[["beta_0"]]$mean[i] + 
+                              stanMod_main[["beta_1"]]$mean[i] * (log(2)+log_K_pred),
+                       K_pred = K_pred,
+                       plate_idx = stanMod_main[["beta_0"]]$plate_idx[i],
+                       q.025 = stanMod_main[["pred_norm_rand"]]$q.025,
+                       q.975 = stanMod_main[["pred_norm_rand"]]$q.975)
+                       
+    pred_all <- rbind(pred_all,pred)
+}
+pred_all$high_ci = pred_all$Mean + pred_all$q.975
+pred_all$low_ci = pred_all$Mean + pred_all$q.025
+pred_all <- pred_all %>% rename(copies_ul = K_pred)
+
+# Ok. Overlay estimated standard curve on observations
+p_stand_fits <- ggplot(dat.stand1 ) +
+                      geom_point(aes(x=copies_ul,y=Ct)) +
+                      geom_line(data=pred_all,
+                            aes(x=copies_ul, y=Mean,group=plate_idx), color="red") +
+                      geom_line(data=pred_all,
+                            aes(x=copies_ul,y=high_ci,group=plate_idx),
+                                color="red",linetype = "dashed") +
+                      geom_line(data=pred_all,
+                            aes(x=copies_ul,y=low_ci,group=plate_idx),
+                            color="red",linetype = "dashed") +
+                      scale_x_continuous(trans="log",
+                            breaks = c(1,5,10^seq(1:5)),
+                            labels = LAB) +
+                      coord_cartesian(ylim=c(15,NA)) +
+                      facet_wrap(~plate_idx)+
+                      theme_bw() +
+                      geom_point(data= dat.stand %>%  
+                         filter(qPCR == PLATE, inhibition_rate > INHIBIT.RATE ),
+                         aes(x=copies_ul,y=Ct),color="blue") +
+                      theme(axis.text.x = element_text(angle = 90, 
+                                                       vjust = 0.5, 
+                                                       hjust = 1))
+
+# Ok. Overlay detection probability on presence-absence observations
+p_stand_fits_theta <- ggplot(dat.stand1 ) +
+                      geom_jitter(aes(y=bin.obs,x=copies_ul,
+                                      color=qPCR),
+                                  height=0.05,width=0.10,alpha=0.5) +
+                      geom_line(data=stanMod_main$pred_theta,
+                              aes(x=K_pred,y=mean),color="red") +
+                      scale_x_continuous(trans="log",
+                               breaks = c(1,5,10^seq(1:5)),
+                               labels = LAB) +
+                      scale_y_continuous("Detection Probability",
+                               breaks = c(0,0.25,0.5,0.75,1.0))+
+                      geom_line(data=stanMod_main$pred_theta,
+                              aes(x=K_pred,y=q.975),color="red",
+                              linetype="dashed") +
+                      geom_line(data=stanMod_main$pred_theta,
+                              aes(x=K_pred,y=q.025),color="red",
+                              linetype="dashed") +
+                      theme_bw() +
+                      theme(legend.position = "none")
+p_beta0 <- rstan::plot(stanMod,pars=c("beta_0")) 
+p_beta1 <- rstan::plot(stanMod,pars=c("beta_1")) +
+                geom_vline(xintercept= -1 / log(2), linetype="dashed")
+p_var <- rstan::plot(stanMod,pars=c("sigma_0","gamma_0","gamma_1","phi"))
+```
+
+```{r message=FALSE, warning=FALSE,fig.height=8}
+#| label: fig-stand-fits
+#| fig-height: 8
+#| fig-width: 6.5
+#| out-width: "100%"
+#| fig-cap: "Estimated standard curves for each qPCR plate.  Red lines show posterior mean estimate with dashed lines illustrating the 95/% CI. Black points show observations include in estimation. Blue points show observations excluded due to inhibition."
+# Standard Positive observations
+print(p_stand_fits)
+```
+
+```{r message=FALSE, warning=FALSE}
+#| label: fig-stand-pres-abs
+#| fig-height: 3
+#| fig-width: 5
+#| out-width: "75%"
+#| fig-cap: "Estimated detection probability ($\\phi$) as a function hake DNA concentration. Lines show posterior mean and 95\\% CI.  Points show individual replicates with each plate represented by a different color.  Point have been jittered slightly to reduce overlap."
+# Standard curve fits, pres-abs
+print(p_stand_fits_theta)
+```
+
+```{r message=FALSE,warning=FALSE}
+#| label: fig-stand-params
+#| fig-height: 6
+#| fig-width: 6
+#| out-width: "100%"
+#| fig-cap: "Posterior estimates for all parameters in the many plate model.  Posterior means, interquartile range, and 95\\% CI shown. The dashed line in the upper right panel shows the constrint on the maximum possible slope."
+# Posterior estimates
+grid.arrange(p_beta0,p_beta1,p_var,ncol=2,heights=c(1,0.4))
+```
+
+\clearpage
+
+So the above models and plots suggest that *i*) the standard curves reflect the observations well and are quite similar among plates; *ii*) we are likely to detect hake DNA down to quite low concentrations (we will detect hake about 80% of the time at a concentration of 1 copy per $\mu$L); *iii*) our estimates of slopes are very close the theoretical maximum of -1.448 indicating our PCRs are very efficient; and *iv*) our estimates of all parameters are relatively precise indicating that they reflect available data, not our prior information.
+
+The examination of standards and estimating the parameters of the standard curve are key for translating observations into estimates of DNA concentrations. In general terms, the standard curve analysis can be classified as a type of observation model. Now that it is estimated, we can use this observation model to understand field samples that contain unknown concentrations of hake DNA.
+
+## 3. Field Samples
+
+### A basic model
+
+For samples collected from the environment, we are typically interested in how DNA concentration varies over space, time, depth, or with other covariates. Therefore, we introduce $D_{k}$ to represent the DNA concentration from field sample $k$. The model for field samples is necessarily closely linked with the model for standards. In fact, for a set of observed amplifications, $G_{kjr}$ and $C_{kjr}$, with $j$ indexing PCR plate and $r$ indicating replicate PCR, we simply replace the known concentrations from the standards, $K_i$, with the unknown concentrations for the field samples, $D_{k}$, yielding,
+
+\begin{align}
+  G_{kjr} &\sim \text{Bernoulli}\left(1-e^{-2 D_k \phi}\right) \notag \\
+  \mu_{kj} &= \beta_{0j}+\beta_{1j}\log{(2D_{k})} \notag \\
+  \sigma_{Ci}^2 &= \sigma_0^2 + e^{2(\gamma_0 + \gamma_1 \log(2D_k))} \notag \\
+  C_{kjr} &\sim \text{Normal}(\mu_{kj},\sigma_{Ck}) \qquad  \text{if}  \quad G_{kjr} =1.
+\end{align}
+
+The observation parameters ($\beta_{0j}, \beta_{1j}, \gamma_{0}, \gamma_{1}, \sigma_0, \phi$) are informed by the standards model above, the data ($G_{kjr}, C_{kjr}$) are provided by the qPCR machine, leaving only the unknown DNA concentration parameters to be estimated. Each water sample is analyzed using at least 3 independent qPCR replicates to account for laboratory and machine variability.
+
+Below we extract a toy data set including 14 individual field samples from the 2025 survey and estimate the hake DNA concentration. Note that in the below model, we simultaneously estimate the observation parameters alongside the unknown concentrations. This allows for the uncertainty in the standard curve parameters to be reflected in the DNA concentration of the unknown samples.
+
+```{r message=FALSE,warning=FALSE}
+# Read in some field observations.
+
+dat.samp <- readRDS(here('Data','_Compiled_qpcr_data',
+                         'dat_samp_few_2025.rds'))
+
+samp_numbs <- dat.samp %>% distinct(sample.orig) %>% unlist() %>% as.numeric()
+
+# make sample index
+samp_idx <- dat.samp %>% distinct(sample) %>% mutate(samp_idx = 1:nrow(.))
+N_samp <- nrow(samp_idx)
+dat.samp <- dat.samp %>% left_join(.,samp_idx)
+
+dat.samp.pos <- dat.samp %>% filter(bin_obs_samp==1)
+N_obs_samp  <- nrow(dat.samp)
+N_obs_samp_pos <- nrow(dat.samp.pos)
+
+# Vector of indexes for positive observations
+pos_idx = which(dat.samp$bin_obs_samp>0)
+
+# Make a simple plot of the raw PCR data
+p_few_samps <- ggplot(dat.samp) +
+                geom_point(aes(x=sample.orig,y=Ct),alpha=0.5) +
+                geom_point(data = dat.samp %>% filter(Ct<0),
+                           aes(x=sample.orig,y=40),alpha=0.5,color="red") +
+                coord_cartesian(ylim=c(24,NA)) +
+                scale_x_continuous(breaks=samp_numbs, labels = samp_numbs)+
+                theme_bw()
+```
+
+```{r message=FALSE,warning=FALSE}
+#| label: fig-samps-few-Ct
+#| fig-height: 3.5
+#| fig-width: 5
+#| out-width: "75%"
+#| fig-cap: "Observed Ct for hake from 14 samples. Points indicate replicate observations. Estimated cycle of amplification show in black.  Red points show failed amplification (plotted arbitrarily at 40 cycles)"
+
+print(p_few_samps)
+```
+
+```{r message=FALSE,warning=FALSE, results='hide'}
+stan_data_field <- list(N_obs_samp = N_obs_samp,
+                    N_obs_samp_pos = N_obs_samp_pos,
+                    N_samp = N_samp,
+                 
+                    bin_obs_samp = dat.samp$bin_obs_samp,
+                    ct_obs_samp  = dat.samp.pos$Ct,
+                 
+                    pos_idx = pos_idx, # vector of indices for non-zeros
+                    plate_samp_idx = dat.samp$plate_idx,
+                    samp_idx = dat.samp$samp_idx ,
+                    
+                    log_D_prior = c(3,8)
+                    ) 
+               
+stan_data_field <- c(stan_data_field,stan_data_standards)
+
+N_CHAIN = 3
+WARM = 1000
+ITER = 2000
+
+init_stan <- function(N_plate,N_CHAIN){
+              init_list <- list()
+              for(i in 1:N_CHAIN){
+                init_list[[i]] <- list(beta_0 = runif(N_plate,30,40),
+                                       log_D = runif(N_samp,2,4));
+              }
+              return(init_list)
+}
+
+# This should take about 10 seconds.
+stanMod = stan(file = here("Scripts","vignette_stan",
+                          "qPCR_simple.stan") ,
+               data = stan_data_field , 
+               verbose = FALSE, chains = N_CHAIN, thin = 1, 
+               warmup = WARM, iter = WARM + ITER, 
+               init = init_stan(N_plate,N_CHAIN),
+               refresh = 0,
+               boost_lib = NULL
+          )
+# As with any Bayesian model, you should always look at traceplots, examine
+# convergence criteria like R^2, and visually examine the quality of fits.
+# traceplot(stanMod,pars=c("beta_0","beta_1","gamma_0","gamma_1","logit_phi","sigma_0"))
+
+stanMod_samp_all <- summary(stanMod)$summary
+stanMod_samp <- list()
+stanMod_samp[["beta_0"]]    <- summary(stanMod,pars=c("beta_0"))$summary %>% 
+                                as.data.frame() %>% 
+                                cbind(.,plate_idx=PLATES$plate_idx) %>% 
+                                rename(q.975 = '97.5%',q.025 = '2.5%')
+stanMod_samp[["beta_1"]]    <- summary(stanMod,pars=c("beta_1"))$summary %>% 
+                                as.data.frame() %>% 
+                                cbind(.,plate_idx=PLATES$plate_idx) %>% 
+                                rename(q.975 = '97.5%',q.025 = '2.5%')
+stanMod_samp[["gamma_0"]]   <- summary(stanMod,pars=c("gamma_0"))$summary
+stanMod_samp[["gamma_1"]]   <- summary(stanMod,pars=c("gamma_1"))$summary
+stanMod_samp[["logit_phi"]] <- summary(stanMod,pars=c("logit_phi"))$summary
+stanMod_samp[["sigma_0"]]   <- summary(stanMod,pars=c("sigma_0"))$summary
+stanMod_samp[["phi"]]       <- summary(stanMod,pars=c("phi"))$summary
+stanMod_samp[["pred_norm_rand"]] <- summary(stanMod,pars=c("pred_SD"))$summary %>% 
+                                    as.data.frame() %>% 
+                                    cbind(.,K_pred) %>% 
+                                    rename(q.975 = '97.5%',q.025 = '2.5%')
+stanMod_samp[["pred_theta"]]   <- summary(stanMod,pars=c("pred_theta"))$summary %>% 
+                                  as.data.frame() %>% 
+                                  cbind(.,K_pred) %>% 
+                                  rename(q.975 = '97.5%',q.025 = '2.5%')
+stanMod_samp[["D"]]   <- summary(stanMod,pars=c("D"))$summary %>% 
+                                  as.data.frame() %>% 
+                                  cbind(.,samp_idx) %>% 
+                                  rename(q.975 = '97.5%',q.025 = '2.5%') %>% 
+                                  mutate(samp_numbs = substr(sample,7,11),
+                                         samp_numbs = as.numeric(samp_numbs))
+
+brks <- c(0.3,1,3,10,30,100,300,1000,3000)
+labs <- as.character(brks)
+# Ok. Overlay estimated standard curve on observations
+p_samp_fits <- ggplot(stanMod_samp$D ) +
+                    geom_point(aes(x=samp_numbs,y=mean)) +
+                    geom_errorbar(aes(x=samp_numbs,ymin=q.025,ymax=q.975)) +
+                    scale_x_continuous(breaks=samp_numbs, labels = samp_numbs) +
+                      scale_y_continuous("DNA Concentration\n(copies per uL)",
+                                  trans="log",breaks=brks,labels = labs) +
+                      theme_bw() +
+                      theme(axis.text.x = element_text(angle = 90, 
+                                                       vjust = 0.5, 
+                                                       hjust = 1))
+
+dat.samp.post <- left_join(dat.samp, stanMod_samp$D)
+
+p_samp_ct_D <- ggplot(dat.samp.post ) +
+                      geom_point(aes(x=mean,y=Ct),alpha=0.5) +
+                      scale_x_continuous("DNA Concentration (copies per uL)",trans="log",breaks=c(0.3,1,3,10,30,100,300,1000,3000))+
+                      scale_y_continuous(limits=c(25,40)) +
+                      theme_bw()
+```
+
+```{r message=FALSE,warning=FALSE}
+#| label: fig-samps-few-DNA
+#| fig-height: 5
+#| fig-width: 4
+#| out-width: "75%"
+#| fig-cap: "Estimated DNA hake concentration for 14 samples. Top panel shows posterior estimates of hake DNA concentration (mean and 95/% CI) for each sample.  Bottom panel shows the relationship between observed PCR cycle and the posterior mean estimates for DNA concentration from three replicate observations for each sample."
+
+grid.arrange(p_samp_fits,p_samp_ct_D,ncol=1)
+```
+
+### More complicated DNA models
+
+While the above model is illustrative as it informs the basics on how to estimate concentration, we are only rarely interested in the DNA concentration on a sample by sample basis. Generally, we are interested in understanding what causes variation among individual samples and how they can be tied back to the taxa of interest. For example, we might hypothesize that hake DNA concentrations for change with the depth at which the sample was taken, or with the distance from shore, or with the depth of the ocean floor, or with latitude. The flexible, general form to add covariates is that we make the hake DNA concentration a function of parameters related to covariates of interest. If we let $f()$ be a function (it could be a linear function or a spline or a wide variety of other potential forms) and $\boldsymbol{X}$ represents covariates of interest, then we can express the DNA concentration as,
+
+\begin{align}
+  \log D_k = f(\boldsymbol{X}).
+\end{align}
+
+The form of $f()$ could be simple or complicated, parametric or non-parametric, spicy or sweet. It is entirely determined by the desires of the researcher. The important point is that regardless of the form of $f()$, the observation model (i.e., the standard curve and associated parameters) does not change. The relationship between qPCR observations and DNA concentrations are solely determined by the $\beta$s, $\gamma$s, $\phi$, and $\sigma_0$.
+
+In part 2 of the qPCR vignette, we will explore additional forms for the DNA concentration.
+
+\clearpage
+\newpage
+
+## References
