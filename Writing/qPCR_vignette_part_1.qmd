@@ -1,8 +1,8 @@
 ---
 title: "qPCR vignette Part 1"
 subtitle: Statistics and the standard curve.
-author: A.O. Shelton and friends.
-date: today
+author: A.O. Shelton.
+date: 10/22/2026
 format:
   pdf:
     fig-format: png
