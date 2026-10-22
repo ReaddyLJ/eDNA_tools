@@ -7,7 +7,7 @@ data { /////////////////////////////////////////////////////////////////////////
     int N_stand_pos ; // Number of observations for count part of the standards model
     
     // Observations
-    int bin_obs[N_stand_bin]     ;
+    array[N_stand_bin] int bin_obs     ;
     vector[N_stand_pos] ct_obs ;
     
     // Concentrations

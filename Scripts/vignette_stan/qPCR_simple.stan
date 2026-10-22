@@ -8,7 +8,7 @@ data { /////////////////////////////////////////////////////////////////////////
     int N_stand_pos ; // Number of observations for count part of the standards model
     
     // Observations
-    int bin_obs_stand[N_stand]     ;
+    array[N_stand] int bin_obs_stand    ;
     vector[N_stand_pos] ct_obs_stand ;
     
     // Concentrations
@@ -17,8 +17,8 @@ data { /////////////////////////////////////////////////////////////////////////
     
     // Indexes
     int N_plate;
-    int plate_stand_idx[N_stand];
-    int pos_stand_idx[N_stand_pos];
+    array[N_stand] int plate_stand_idx;
+    array[N_stand_pos] int pos_stand_idx;
     
     // Field Samples 
     // Counters
@@ -27,13 +27,13 @@ data { /////////////////////////////////////////////////////////////////////////
     int N_samp;
                
     // Observations             
-    int bin_obs_samp[N_obs_samp] ;
+    array [N_obs_samp] int bin_obs_samp ;
     vector[N_obs_samp_pos] ct_obs_samp ; 
     
     //Indexes
-    int pos_idx[N_obs_samp_pos] ;
-    int plate_samp_idx[N_obs_samp];
-    int samp_idx[N_obs_samp];
+    array[N_obs_samp_pos] int pos_idx ;
+    array[N_obs_samp] int plate_samp_idx;
+    array[N_obs_samp] int samp_idx;
     
     // Prior Distributions and constraints
     vector[2] beta0_prior;

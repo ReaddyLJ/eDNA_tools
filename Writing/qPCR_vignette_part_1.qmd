@@ -1,7 +1,7 @@
 ---
 title: "qPCR vignette Part 1"
 subtitle: Statistics and the standard curve.
-author: A.O. Shelton and friends.
+author: A.O. Shelton
 date: today
 format:
   pdf:
@@ -24,7 +24,7 @@ header-includes:
 
 This is the first in a series of vignettes intended to introduce the analysis of water samples collected for environmental DNA (eDNA) using quantitative PCR (qPCR). This document is intended to walk through the required steps for taking laboratory results from qPCR through to statistical results. To make this document as useful and applied as possible, we introduce an example dataset derived from the Integrated West Coast Pelagics Survey to walk through each step of qPCR data analysis. We provide code for both data processing and statistical throughout.
 
-This document is not an exhaustive discussion of all aspects of qPCR analyses. In particular, we will not discuss the work required to develop and test a qPCR primer for use. The development of qPCR primers is described extensively in the published literature and we refer interested parties to this literature [see e.g.,, @Andruszkiewicz2020; @Allison2023; @Klymus2020; @Lopez2025].
+This document is not an exhaustive discussion of all aspects of qPCR analyses. In particular, we will not discuss the work required to develop and test a qPCR primer for use. The development of qPCR primers is described extensively in the published literature and we refer interested parties to this literature [see e.g., @Andruszkiewicz2020; @Allison2023; @Klymus2020; @Lopez2025].
 
 The following document is broken into three sections. First, we provide background and discuss the motivation and aims of qPCR analyses. Second, we walk through the main data components needed for qPCR analysis. We start with the creation and estimation of the standard curve for water samples associated with Pacific hake. Third, we add a small number of field samples to they analysis and show how to analyze field samples alongside standard curve observations. This provides estimates of DNA concentration for unknown samples.
 
@@ -547,7 +547,8 @@ print(p_few_samps)
 ```
 
 ```{r message=FALSE,warning=FALSE, results='hide'}
-stan_data_field <- list(N_obs_samp = N_obs_samp,
+stan_data_field <- list(
+                    N_obs_samp = N_obs_samp,
                     N_obs_samp_pos = N_obs_samp_pos,
                     N_samp = N_samp,
                  
@@ -576,7 +577,7 @@ init_stan <- function(N_plate,N_CHAIN){
               return(init_list)
 }
 
-# This should take about 10 seconds.
+# Estimate the model.
 stanMod = stan(file = here("Scripts","vignette_stan",
                           "qPCR_simple.stan") ,
                data = stan_data_field , 
